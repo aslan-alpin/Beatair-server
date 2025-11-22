@@ -1,0 +1,15 @@
+{
+  "name": "beatair-remote-addon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Beatair server remote tunnel addon (ephemeral domain via localtunnel)",
+  "scripts": {
+    "tunnel": "node start-tunnel.js"
+  },
+  "dependencies": {
+    "localtunnel": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
