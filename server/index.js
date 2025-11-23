@@ -469,34 +469,34 @@ async function playTopOrSpotifyNext(trigger = 'unknown') {
 /* ==============================
    Pairing helpers + endpoints
    ============================== */
-function normalizeBase(u = ''){
+
+function normalizeBase(u = '') {
   if (!u) return '';
   let url = String(u).trim();
+  // default to https when missing scheme
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  // strip trailing slash(es)
   return url.replace(/\/+$/, '');
 }
+
 function pairCode(url) {
   const h = crypto.createHash('sha256').update(String(url)).digest('hex');
   const n = parseInt(h.slice(0, 8), 16) % 1_000_000;
   return String(n).padStart(6, '0');
 }
-function readLastTunnelUrl() {
-  try {
-    // Prefer server/remote/last-url.json; fallback to ./last-url.json
-    const p1 = path.resolve(__dirname, 'remote', 'last-url.json');
-    const p2 = path.resolve(__dirname, 'last-url.json');
-    const p = fs.existsSync(p1) ? p1 : (fs.existsSync(p2) ? p2 : null);
-    if (p) {
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-      if (j?.url) return String(j.url);
-    }
-  } catch {}
-  return null;
-}
+
+/**
+ * Figure out the public base URL of this server.
+ * Priority:
+ *   1) process.env.PUBLIC_BASE_URL (you should set this to your https domain)
+ *   2) x-forwarded-proto + x-forwarded-host (behind nginx / proxy)
+ *   3) req.protocol + req.host
+ */
 function inferPublicUrl(req) {
   if (process.env.PUBLIC_BASE_URL) {
     return normalizeBase(process.env.PUBLIC_BASE_URL);
   }
+
   const xfProto = req.get('x-forwarded-proto');
   const xfHost  = req.get('x-forwarded-host');
   const host    = req.get('host');
@@ -508,11 +508,10 @@ function inferPublicUrl(req) {
     return normalizeBase(`${(req.protocol || 'https').toLowerCase()}://${host}`);
   }
 
-  const last = readLastTunnelUrl();
-  if (last)  return normalizeBase(last);
-
+  // absolute worst case – should rarely happen on a real VPS
   return '';
 }
+
 function issueToken() {
   return crypto.randomBytes(24).toString('base64url');
 }
@@ -523,20 +522,18 @@ app.post(['/pair/verify', '/api/pair/verify'], (req, res) => {
   try {
     const code = String(req.body?.code || '').trim();
     if (!/^\d{6}$/.test(code)) {
-      return res.status(400).json({ ok:false, error:'bad_code' });
+      return res.status(400).json({ ok: false, error: 'bad_code' });
     }
 
-    // build candidate base URLs
     const candidates = [];
+
+    // explicit URL from client
     if (req.body?.url) candidates.push(normalizeBase(req.body.url));
 
+    // inferred from env / proxy headers
     const inferred = inferPublicUrl(req);
     if (inferred) candidates.push(inferred);
 
-    const fromFile = readLastTunnelUrl();
-    if (fromFile) candidates.push(normalizeBase(fromFile));
-
-    // dedupe and test
     const uniq = [...new Set(candidates.filter(Boolean))];
 
     let matchedUrl = '';
@@ -548,10 +545,9 @@ app.post(['/pair/verify', '/api/pair/verify'], (req, res) => {
     }
 
     if (!matchedUrl) {
-      return res.status(401).json({ ok:false, error:'code_mismatch' });
+      return res.status(401).json({ ok: false, error: 'code_mismatch' });
     }
 
-    // okay, legit
     const token = issueToken();
     const ip = getIp(req);
     const cafeName = process.env.CAFE_NAME || 'Beatair Café';
@@ -573,29 +569,26 @@ app.post(['/pair/verify', '/api/pair/verify'], (req, res) => {
     });
   } catch (e) {
     console.error('pair/verify error:', e);
-    return res.status(500).json({ ok:false, error:'server_error' });
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 
 // 2. client sends username/avatar with that token to "lock in" identity.
-//    We store them in both clientTokens and dashboard-visible `users`.
 app.post('/identify', (req, res) => {
   const { token, username, avatar } = req.body || {};
 
   if (!token || !clientTokens.has(token)) {
-    return res.status(404).json({ ok:false, error:'invalid_token' });
+    return res.status(404).json({ ok: false, error: 'invalid_token' });
   }
 
   const ip = getIp(req);
   const uname = String(username || '').trim() || 'Guest';
   const av    = String(avatar   || '').trim() || '🎧';
 
-  // ban check
   if (isUserBannedByNameOrIp(uname, ip)) {
-    return res.status(403).json({ ok:false, error: 'banned' });
+    return res.status(403).json({ ok: false, error: 'banned' });
   }
 
-  // update token record
   const rec = clientTokens.get(token);
   rec.username = uname;
   rec.avatar   = av;
@@ -603,7 +596,6 @@ app.post('/identify', (req, res) => {
   rec.lastSeen = Date.now();
   clientTokens.set(token, rec);
 
-  // also surface in dashboard users list
   users.set(token, {
     userId: token,
     username: uname,
@@ -621,7 +613,7 @@ app.post('/identify', (req, res) => {
 
 // tiny debug for frontend / QR overlay
 app.get('/pair/info', (req, res) => {
-  const url = inferPublicUrl(req) || readLastTunnelUrl() || '';
+  const url  = inferPublicUrl(req);
   const code = url ? pairCode(url) : null;
   res.json({
     url,
@@ -630,16 +622,10 @@ app.get('/pair/info', (req, res) => {
   });
 });
 
-// serve the QR png (tunnel script writes remote/qr.png)
+// We no longer rely on a tunnel-written qr.png. Dashboard will render QR itself.
 app.get('/qr.png', (req, res) => {
-  const p1 = path.resolve(__dirname, 'remote', 'qr.png');
-  const p2 = path.resolve(__dirname, 'qr.png');
-  const p = fs.existsSync(p1) ? p1 : (fs.existsSync(p2) ? p2 : null);
-  if (!p) return res.status(404).send('no qr');
-  res.setHeader('Cache-Control', 'no-store');
-  res.sendFile(p);
+  res.status(404).send('QR is generated client-side now');
 });
-
 /* ==============================
    API
    ============================== */

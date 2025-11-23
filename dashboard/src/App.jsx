@@ -1,4 +1,4 @@
-
+import PairingCard from './PairingCard';
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { endpoints, SOCKET_BASE, DEBUG_BASES } from './lib/api'
 import { io } from 'socket.io-client'
