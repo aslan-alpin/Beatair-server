@@ -1,8 +1,8 @@
 {
-  "url": "https://beatair-3b27c7.loca.lt",
-  "code": "032082",
+  "url": "https://beatair-9e1714.loca.lt",
+  "code": "107455",
   "name": "Beatair Café",
-  "qrText": "beatair://pair?v=1&u=https%3A%2F%2Fbeatair-3b27c7.loca.lt&c=032082&n=Beatair%20Cafe%CC%81",
-  "qrPngPath": "/Users/aslanalpin/Desktop/Beatair/server/remote/qr.png",
-  "createdAt": "2025-11-20T20:17:47.342Z"
+  "qrText": "beatair://pair?v=1&u=https%3A%2F%2Fbeatair-9e1714.loca.lt&c=107455&n=Beatair%20Cafe%CC%81",
+  "qrPngPath": "/Users/aslanalpin/Desktop/Beatair/Beatair-server/server/remote/qr.png",
+  "createdAt": "2025-11-23T13:32:51.201Z"
 }
